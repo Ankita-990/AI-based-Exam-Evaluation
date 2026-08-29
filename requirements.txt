@@ -3,7 +3,7 @@ pdf2image>=1.17
 easyocr>=1.7
 spacy==3.7.5
 Pillow>=10.0
-numpy>=1.26
+numpy<2.0
 # en_core_web_md isn't on PyPI under a normal name; pip-installable wheel URL
 # so Streamlit Community Cloud can install it straight from requirements.txt.
 https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.7.1/en_core_web_md-3.7.1-py3-none-any.whl
