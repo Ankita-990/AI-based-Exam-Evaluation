@@ -5,6 +5,7 @@ modules so they can be unit tested without Streamlit.
 """
 
 import easyocr
+import gc
 import spacy
 import streamlit as st
 from PIL import ImageDraw
@@ -75,9 +76,8 @@ with col_a:
 process_clicked = st.button("Process", type="primary", disabled=not (question_files and answer_files))
 
 if process_clicked and question_files and answer_files:
-    with st.spinner("Loading OCR + NLP models (first run can take a minute)…"):
+    with st.spinner("Loading OCR model (first run can take a minute)…"):
         reader = get_ocr_reader()
-        nlp = get_spacy_model()
 
     progress = st.progress(0, text="Extracting question paper…")
     q_doc = build_document_multi(question_files, reader)
@@ -90,8 +90,12 @@ if process_clicked and question_files and answer_files:
     progress.progress(65, text="Segmenting answer sheet into answer blocks…")
     raw_answers = segment_answers(a_doc.lines)
     answers = stitch_continuations(raw_answers)
+    gc.collect()  # release OCR intermediates before loading the spaCy model
+
 
     progress.progress(85, text="Matching answers to questions…")
+    with st.spinner("Loading similarity model for fallback matching…"):
+        nlp = get_spacy_model()
     match_result = run_matching(nlp, questions, answers)
 
     progress.progress(100, text="Done.")
