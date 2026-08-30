@@ -27,6 +27,24 @@ CONTINUATION_MARKERS = [
 OCR_LANGUAGES = ["en"]
 OCR_GPU = False  # Streamlit Community Cloud free tier has no GPU
 
+# PDF -> image render resolution. 200 dpi is crisp but slow to OCR on a
+# single shared CPU core; 150 is still legible for typical exam-paper text
+# and noticeably faster to both render and run detection/recognition on.
+PDF_RENDER_DPI = 150
+
+# Longest-side cap (pixels) for the copy of each page actually fed into
+# EasyOCR. Detection+recognition cost scales roughly with pixel count, so
+# capping this is the single biggest CPU-time lever. The ORIGINAL full-res
+# page image is still kept for display/highlighting -- only the OCR input
+# copy is downscaled, and bounding boxes are re-projected back to full-res
+# coordinates afterward.
+MAX_OCR_DIMENSION = 1600
+
+# EasyOCR's own internal resize target for its detector network. Lower =
+# faster detection, at some cost to recognizing very small text. Default in
+# EasyOCR is 2560; most exam-paper text is legible well below that.
+OCR_CANVAS_SIZE = 1280
+
 # --- Segmentation regex ---------------------------------------------------
 # Matches things like: "1.", "1)", "Q1", "Q1.", "11(a)", "11 (a)", "11.a)",
 # "Ans 1", "Answer 1", "A1."
