@@ -19,7 +19,7 @@ from typing import List
 from PIL import Image
 from pdf2image import convert_from_bytes
 
-from config import OCR_LANGUAGES, OCR_GPU
+from config import OCR_LANGUAGES, OCR_GPU, PDF_RENDER_DPI, MAX_OCR_DIMENSION, OCR_CANVAS_SIZE
 
 
 @dataclass
@@ -50,7 +50,7 @@ def load_pages_from_upload(uploaded_file) -> List[Image.Image]:
     raw_bytes = uploaded_file.read()
 
     if name.endswith(".pdf"):
-        pages = convert_from_bytes(raw_bytes, dpi=200)
+        pages = convert_from_bytes(raw_bytes, dpi=PDF_RENDER_DPI)
         return pages
 
     if name.endswith((".png", ".jpg", ".jpeg")):
@@ -69,22 +69,50 @@ def _easyocr_box_to_rect(box) -> tuple:
     return (min(xs), min(ys), max(xs), max(ys))
 
 
+def _downscale_for_ocr(image: Image.Image, max_dim: int) -> tuple:
+    """
+    Returns (possibly-downscaled copy, scale_factor). scale_factor is how
+    much smaller the OCR copy is vs. the original (e.g. 0.5 = half size);
+    used afterward to project bounding boxes back to the original page's
+    coordinate space so highlighting on the full-res image stays accurate.
+    """
+    width, height = image.size
+    longest_side = max(width, height)
+    if longest_side <= max_dim:
+        return image, 1.0
+
+    scale_factor = max_dim / longest_side
+    new_size = (max(1, int(width * scale_factor)), max(1, int(height * scale_factor)))
+    resized = image.resize(new_size, Image.LANCZOS)
+    return resized, scale_factor
+
+
 def run_ocr_on_pages(reader, pages: List[Image.Image]) -> List[OCRLine]:
     """
     Extract stage. Runs EasyOCR on every page image and returns a flat list
     of OCRLine records, preserving page index and bounding box for each
     recognized text region (needed later for the highlight step).
+
+    Each page is downscaled to MAX_OCR_DIMENSION before OCR to keep CPU time
+    manageable on a single shared core; bounding boxes are then scaled back
+    up so they still line up with the full-resolution page image used for
+    display/highlighting.
     """
     lines: List[OCRLine] = []
     for page_idx, page_image in enumerate(pages):
-        # EasyOCR accepts numpy arrays or file paths; PIL -> numpy via readtext.
         import numpy as np
-        result = reader.readtext(np.array(page_image))
+
+        ocr_input, scale_factor = _downscale_for_ocr(page_image, MAX_OCR_DIMENSION)
+        result = reader.readtext(np.array(ocr_input), canvas_size=OCR_CANVAS_SIZE)
+
+        inv_scale = 1.0 / scale_factor
         for box, text, conf in result:
             text = text.strip()
             if not text:
                 continue
             rect = _easyocr_box_to_rect(box)
+            if scale_factor != 1.0:
+                rect = tuple(coord * inv_scale for coord in rect)
             lines.append(OCRLine(page=page_idx, text=text, bbox=rect, confidence=conf))
     return lines
 
